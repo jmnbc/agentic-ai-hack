@@ -20,56 +20,22 @@ Before anything else, let's log in into the CLI with our account. Please paste t
 az login --use-device-code
 ```
 
-## 1.2.1 Service Principal Setup (Optional - For Challenge 5)
+
+## 1.2.1 Service Principal Setup 
 
 **Note:** This step is only required if you plan to use Azure Functions in Challenge 5. If you're unsure, you can skip this step and proceed to deployment.
 
 The Azure resources include optional service principal permissions that allow automated access to AI services. If you want to use these features:
 
-### Option 1: Use an existing service principal
 If you have an existing service principal (Client ID), run:
 
-**Linux/macOS/WSL:**
 ```bash
 ./get-sp-object-id.sh YOUR_CLIENT_ID
 ```
-
-**Windows PowerShell:**
-```powershell
-.\get-sp-object-id.ps1 YOUR_CLIENT_ID
-```
-
-### Option 2: Create a new service principal
-If you need to create a new service principal, run:
-
-**Linux/macOS/WSL:**
-```bash
-# Create a new service principal and get its Client ID
-CLIENT_ID=$(az ad sp create-for-rbac --name "my-hackathon-sp" --query "appId" -o tsv)
-echo "Created service principal with Client ID: $CLIENT_ID"
-
-# Now get the Object ID using our script
-./get-sp-object-id.sh $CLIENT_ID
-```
-
-**Windows PowerShell:**
-```powershell
-# Create a new service principal and get its Client ID
-$CLIENT_ID = az ad sp create-for-rbac --name "my-hackathon-sp" --query "appId" -o tsv
-Write-Host "Created service principal with Client ID: $CLIENT_ID"
-
-# Now get the Object ID using our script
-.\get-sp-object-id.ps1 $CLIENT_ID
-```
-
-### Option 3: Skip service principal setup
-You can proceed without a service principal by leaving the `servicePrincipalObjectId` parameter empty during deployment.
-
-If you run into permission issues with the script, please run:
-- **Linux/macOS/WSL:** `chmod +x get-sp-object-id.sh` first
-- **Windows PowerShell:** Ensure execution policy allows scripts with `Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser`
-
 Save the Object ID value returned - you'll use it in the next step.
+
+
+## 1.2.2 Resources Deployment
 
 Now, time to deploy our resources to Azure!
 
