@@ -31,7 +31,7 @@ Let's have a look at the 2 most common Orchestration patterns:
 In `Sequential Orchestration` the Agents are dependent on a task performed from the previous agent. This is very common in workflows like document processing or step-by-step procedures. With `Concurrent Orchestration` the agents are not dependent on each other and therefore it makes this a great orchestration for parallel processing, multi-source research and so on.
 
 ## Let's come back to our use case...
-`Concurrent Orchestration` is the answer for our use case. We will have 3 agents that are each responsible for gathering and processing specialized information on different matters from different datasources in our knowledge base. In this challenge, we will create a 4th agent that is responsible for Orchestrating these 3 agents and create the final output that we need. Please have a look at the table underneath and review how we have created our 3 orchestrators.
+`Concurrent Orchestration` is the answer for our use case. We will have 3 agents that are each responsible for gathering and processing specialized information on different matters from different datasources in our knowledge base. In this challenge, we will create a 4th agent that is responsible for Orchestrating these 3 agents and create the final output that we need. Please have a look at the table underneath and review how we have created our 3 agents.
 
 | Agent | Function | Data Source/Technology | Implementation |
 |-------|----------|----------------------|----------------|
