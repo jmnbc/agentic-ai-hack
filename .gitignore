@@ -55,6 +55,7 @@ coverage.xml
 .hypothesis/
 .pytest_cache/
 cover/
+eval-metrics-table.csv
 
 # Translations
 *.mo

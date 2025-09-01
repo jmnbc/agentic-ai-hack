@@ -23,17 +23,16 @@ az login --use-device-code
 
 ## 1.2.1 Service Principal Setup 
 
-**Note:** This step is only required if you plan to use Azure Functions in Challenge 5. If you're unsure, you can skip this step and proceed to deployment.
+To enable automated access to AI services, you need to create an Azure AD app registration and service principal.
 
-The Azure resources include optional service principal permissions that allow automated access to AI services. If you want to use these features:
-
-If you have an existing service principal (Client ID), run:
+Run the following command to create both and extract the client ID and object ID:
 
 ```bash
-./get-sp-object-id.sh YOUR_CLIENT_ID
+./create-app-registration.sh YOUR_APP_NAME
 ```
-Save the Object ID value returned - you'll use it in the next step.
 
+Replace YOUR_APP_NAME with a unique name for your app registration (e.g., hackathon-yourinitials).
+The script will output the Client ID and Object ID.
 
 ## 1.2.2 Resources Deployment
 
@@ -47,7 +46,7 @@ Now, time to deploy our resources to Azure!
 
 > **Note:** The **servicePrincipalObjectId** parameter is optional and only needed if you plan to use Azure Functions in Challenge 5 with service principal authentication. If you didn't complete the service principal setup above, simply leave this parameter empty during deployment.
 
-**Manually upload the Template**
+**Option 2 for Deployment: Manually upload the Template**
 1. **Download the template**: Right-click [this link](https://raw.githubusercontent.com/martaldsantos/agentic-ai-hack/main/challenge-0/iac/azuredeploy.json) and save the JSON file
 2. **Open Azure Portal**: Go to [portal.azure.com](https://portal.azure.com)
 3. **Create Custom Deployment**: Search for "Deploy a custom template" or go to [Custom deployment](https://portal.azure.com/#create/Microsoft.Template)

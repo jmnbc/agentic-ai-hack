@@ -5,6 +5,9 @@ from azure.ai.projects import AIProjectClient
 from azure.ai.agents.models import AzureAISearchQueryType, AzureAISearchTool, ListSortOrder, MessageRole
 from semantic_kernel.functions import kernel_function
 from semantic_kernel.agents import AzureAIAgent
+from dotenv import load_dotenv
+
+load_dotenv()
 
 class PolicyCheckerWrapper:
     """Wrapper to make Azure AI Agent Service agent work with Semantic Kernel orchestration"""
