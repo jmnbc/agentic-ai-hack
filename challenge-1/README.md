@@ -16,8 +16,11 @@ In this challenge, we will create a complete document processing and vectorized 
 
 This system will serve as the knowledge foundation for all agents in subsequent challenges, enabling them to access and query insurance policies, claims, and statements intelligently.
 
+> [!CAUTION]
+>For convenience we will use key-based authentication and public network access to resources in the hack. In real world implementations you should consider stronger authentication mechanisms and additional network security.
+
 ## Why Document Processing and Vectorized Search?
-Document processing and vectorized search serve as the foundation for intelligent AI agent systems because they enable agents to understand, query, and reason over complex multimodal content. By converting unstructured documents and images into searchable, semantically-rich representations, we create a knowledge base that agents can query naturally using human language. The combination of Azure AI Search's integrated vectorization with GPT-4o's multimodal capabilities ensures that agents can access both textual policies and visual claim documentation with equal sophistication, enabling comprehensive insurance processing workflows.
+Document processing and vectorized search serve as the foundation for intelligent AI agent systems because they enable agents to understand, query, and reason over complex multimodal content. By converting unstructured documents and images into searchable, semantically-rich representations, we create a knowledge base that agents can query naturally using human language. The combination of Azure AI Search's integrated vectorization with GPT-4-1-mini's multimodal capabilities ensures that agents can access both textual policies and visual claim documentation with equal sophistication, enabling comprehensive insurance processing workflows.
 
 ## Exercise Guide - Build Your Knowledge Foundation!
 
@@ -25,8 +28,8 @@ Document processing and vectorized search serve as the foundation for intelligen
 
 Time to process all your documents! Please jump over to `1.document-processing.ipynb` file for a comprehensive walkthrough on:
 - Setting up Azure Blob Storage for document management
-- Processing text documents using GPT-4o
-- Extracting text from images using GPT-4o vision capabilities
+- Processing text documents using GPT-4-1-mini
+- Extracting text from images using GPT-4-1-mini vision capabilities
 - Preparing documents for vectorization
 
 Please make sure to carefully review all cells, as they demonstrate critical multimodal AI processing techniques.
@@ -71,7 +74,7 @@ Congratulations! You've successfully built a comprehensive document processing a
 
 **Key Achievements:**
 - Implemented Azure Blob Storage integration for secure document management
-- Created multimodal processing pipeline using GPT-4o for text and image content
+- Created multimodal processing pipeline using GPT-4-1-mini for text and image content
 - Built vectorized search index with Azure AI Search integrated vectorization
 - Developed hybrid search capabilities combining keyword, vector, and semantic search
 - Established the knowledge foundation that will power all subsequent AI agent challenges

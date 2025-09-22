@@ -27,7 +27,7 @@ share/python-wheels/
 MANIFEST
 eval-output-simple.json
 eval-input-simple.jsonl
-
+container-apps.sh
 
 simplified_crash_reports.json
 structured_crash_reports.json

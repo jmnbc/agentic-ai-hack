@@ -76,29 +76,80 @@ Set up production monitoring:
 
 ### Part 1. **Evaluation Dataset Preparation**
 
-To start an evaluation for a lot of scenarios you will need a testing dataset. A lot of times, you want to make sure to include a breatdth of data on your testing dataset to be able to capture every nuance that might exist. For that, Microsoft has developed the [Simulator class](https://learn.microsoft.com/en-us/azure/ai-foundry/how-to/develop/simulator-interaction-data) that enables synthetic data generation to address limited production data challenges. 
+To start an evaluation for a lot of scenarios you will need a testing dataset. A lot of times, you want to make sure to include a breadth of data on your testing dataset to be able to capture every nuance that might exist. For that, Microsoft has developed the [Simulator class](https://learn.microsoft.com/en-us/azure/ai-foundry/how-to/develop/simulator-interaction-data) that enables synthetic data generation to address limited production data challenges. 
 
 The simulator creates query-response pairs from text sources, realistic conversation simulations, and adversarial datasets for safety testing. 
 
 This supports both non-adversarial scenarios (conversational testing, training data) and adversarial simulations (jailbreak attacks, safety evaluation), enabling comprehensive insurance domain test scenarios and automated data generation pipelines.All you need to do is connected it to your datasource and let the Generator do it's magic! 
 
-Don't worry, for this challenge, step 1 is guaranteed. You can find the query-response pairs as the `eval-queries.json` file. Have a look at it, and jump over to Part 2.
+Don't worry, step 1 has already been completed for this challenge. You can find the query-response pairs as the `eval-queries.json` file. Have a look at it, and jump over to Part 2.
 
 ### Part 2. **Running the Agent evaluation locally**
-Please jump over to the notebook `agent-evaluator.py`. Have a look at the code in it, run it, and then jump over to the output file `eval-output-simple.json` to have a look at all the logs and evaluations of each one of the queries that were run.
+Now it's time to go back to our terminal, where we will run our `agent-evaluator.py` file. Copy and Paste the following code onto the terminal:
 
+```bash
+cd challenge-3 && python agent-evaluator.py
+```
+Have a look at the code in it, run it, and then jump over to the output file `eval-output-simple.json` to have a look at all the logs and evaluations of each one of the queries that were run. You can also see as an output on your terminal a table that summarizes the evaluation on the 5 queries we evaluated!
 
 ## Part 3. Oh-oh... something doesn't seem right? Let's trace it!
 
-Just like challenge-2, here you have the option to trace every run of your agent or application through the Portal or through the Azure AI Foundry SDK! 
+A really important part of your system is to understand every part of it. For observability, the Azure AI Foundry provides the option to Trace the steps inside your application. Here you have the option to trace every run and message of your agent or application through the Portal or through the Azure AI Foundry SDK! 
 
-Please jump over to the [How to start tracing your application](https://learn.microsoft.com/en-us/azure/ai-foundry/how-to/develop/trace-application#enable-tracing-in-your-project) and follow the steps to enable the Application Insights service (already deployed in challenge-0).
+1. Go back to the Foundry Portal, and on the left-hand side you will find the button `Tracing`
+![alt text](./images/image.png)
+
+2. On the centre of your screen you'll find the blue button that allows you to connect to your Application Insights service (already deployed in challenge-0) that brings the observability capabilities to the Foundry Portal.
+
+3. Now jump over to your `Playground` and select your Policy Checker agent and start a session with your agent.
+
+![alt text](./images/image-1.png)
+
+4. Now, let's try out our agent and understand what happens underneath. To perform such action, let's ask a question related to the policies our agent has available. Copy and paste the following message on your Playground:
+
+```
+What are the most comprehensive insurance policies for cars according to the company policies?
+```
+
+5. You should see a screen similar to this one:
+
+![alt text](./images/image-2.png)
+
+In the Azure AI Foundry Agents Playground, identifying and understanding Thread ID, Run ID, and Tracing is key to debugging and managing multi-step agent workflows.
+
+- Thread ID – top-right corner
+
+At the top right of the screen, you’ll find the Thread ID (e.g., thread_wfA6iQKIGi6WZymQNIHwQnT). This uniquely identifies the **current conversation** session between you and the agent. All messages, tool invocations, and responses associated with this session are grouped under this ID.
+
+- Run ID – available via "Thread logs"
+
+Each time the agent processes an input or message, it creates a Run. A Run ID uniquely identifies that execution—whether it's answering a question, performing a summarization, or calling a tool.
+
+To access the Run ID:
+1. Click the "Thread logs" button near the top (next to "New thread").
+
+2. A panel will open listing all the runs made within this thread.
+
+![alt text](./images/image-3.png)
+
+3. Each run will have a Run ID and a status (e.g., completed, queued, etc.).
+
+4. An important step is not only to trace the inputs and outputs of your session, but also the inputs/outputs of the tools you are using. In this agent, we are only using the Azure AI Search index to look for information. If you click on the purple `Tool` part of your screen, you can find a detailed session that describes the input that was given to the application and the output retrieved from it, including the files that were just retrieved from your application. 
+You should see a screen similar to:
+
+![alt text](./images/image-4.png) 
+
+
+You can now see the backbone of memory on Azure AI Agents and how the hierarchy is structured within it.
+
+If you are curious about Observability in Foundry on the [official documentation](https://learn.microsoft.com/en-us/azure/ai-foundry/how-to/develop/trace-agents-sdk#tracing-in-the-azure-ai-foundry-agents-playground) you have all the information on how to proceed your Observability journey and further steps to configure these tools using only the Foundry SDK!
+
 
 ## 🎯 Conclusion
 
 By completing Challenge 3, you've implemented a comprehensive observability and evaluation framework for your AI agents. You've learned to systematically assess agent performance using Azure AI Foundry's built-in evaluators, create synthetic test datasets, and set up continuous monitoring pipelines. These capabilities ensure your agents maintain high quality, safety, and reliability standards throughout their operational lifecycle, giving you the confidence to deploy robust AI solutions in production environments.
 
-Let's follow to `challenge-4` to start our multi-aagent creation! 
+Let's kick-start our multi-agent creation on `challenge-4`! 
 
 ---
 
