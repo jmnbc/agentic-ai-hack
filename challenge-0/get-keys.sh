@@ -222,10 +222,17 @@ fi
 # AI Project discovery under Foundry account
 ai_project_name=""
 if [[ -n "$foundry_name" && -n "$subscription_id" ]]; then
-  # Prefer the resource name and extract the short project name (avoid displayName which may include suffixes)
+  # Try to find a project matching the new nomenclature: <user_key>-ai-project
   full_project_name=$(az rest --method get \
     --url "https://management.azure.com/subscriptions/${subscription_id}/resourceGroups/${SHARED_RG}/providers/Microsoft.CognitiveServices/accounts/${foundry_name}/projects?api-version=2025-06-01" \
-    --query "value[0].name" -o tsv 2>/dev/null || echo "")
+    --query "value[?ends_with(name, '${USER_KEY}-ai-project')].name | [0]" -o tsv 2>/dev/null || echo "")
+
+  # Fallback to original discovery method if not found
+  if [[ -z "$full_project_name" || "$full_project_name" == "null" ]]; then
+    full_project_name=$(az rest --method get \
+      --url "https://management.azure.com/subscriptions/${subscription_id}/resourceGroups/${SHARED_RG}/providers/Microsoft.CognitiveServices/accounts/${foundry_name}/projects?api-version=2025-06-01" \
+      --query "value[0].name" -o tsv 2>/dev/null || echo "")
+  fi
 
   # Extract short name from formats like "hub-name/my-ai-project" → "my-ai-project"
   if [[ -n "$full_project_name" && "$full_project_name" != "null" ]]; then
@@ -241,9 +248,9 @@ if [[ -n "$foundry_name" && -n "$subscription_id" ]]; then
     ai_project_name="${ai_project_name% AI Project}"
   fi
 
-  # Final fallback
+  # Final fallback with new nomenclature
   if [[ -z "$ai_project_name" || "$ai_project_name" == "null" ]]; then
-    ai_project_name="${USER_KEY}-project"
+    ai_project_name="${USER_KEY}-ai-project"
   fi
 fi
 
