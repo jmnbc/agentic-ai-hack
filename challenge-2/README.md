@@ -69,7 +69,7 @@ Enables integration of multiple agents, allowing them to communicate or collabor
 </div>
 </div>
 
-7. Given this information, it's time to personalize your first agent! Give it a nice name like `Policy Checker`.
+7. Given this information, it's time to personalize your first agent! Give it a nice name like `PolicyChecker` ( not with space and special characters ).
 8. Please set the `Instructions` accordingly to what you want it to do! 
 
 ```

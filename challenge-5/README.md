@@ -154,8 +154,6 @@ Response body (application/json):
       -e AZURE_OPENAI_DEPLOYMENT_NAME="$AZURE_OPENAI_DEPLOYMENT_NAME" \
       -e AZURE_OPENAI_KEY="$AZURE_OPENAI_KEY" \
       -e AZURE_OPENAI_ENDPOINT="$AZURE_OPENAI_ENDPOINT" \
-      -e CLAIM_ID="CL001" \
-      -e POLICY_NUMBER="LIAB-AUTO-001" \
       claim-manager
    ```
 
