@@ -25,48 +25,29 @@ Please select your forked repository from the dropdown and, if necessary, adjust
 **NOTE:** If GitHub Codespaces is not enabled in your organization, you can enable it by following the instructions [here](https://docs.github.com/en/codespaces/managing-codespaces-for-your-organization/enabling-or-disabling-github-codespaces-for-your-organization), or, if you cannot change your GitHub organization's settings, create a free personal GitHub account [here](https://github.com/signup?ref_cta=Sign+up&ref_loc=header+logged+out&ref_page=%2F&source=header-home). The Github Free Plan includes 120 core hours per month, equivalent to 60 hours on a 2-core machine, along with 15 GB of storage.
 
 
-## 1.3 Resource Deployment Guide
-The first step on this hackathon will be to create the resources we will use throughout the day. You can deploy using either the one-click button or manual method below.
+## 1.3 Configure your environment
 
-Before anything else, let's log in into the CLI with our account. Please paste the code underneath and follow the necessary instructions.
+You will be provided with an Azure username and password, and the name of a resource group that contains the resources for this hackathon.
+
+First, log in to Azure using the provided credentials.
 
 ```bash
 az login --use-device-code
 ```
 
-## 1.3.1 Resources Deployment
-
-Now, time to deploy our resources to Azure!
-
-[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fmartaldsantos%2Fagentic-ai-hack%2Fmain%2Fchallenge-0%2Fiac%2Fazuredeploy.json)
-
-**Deployment Parameters:**
-- servicePrincipalObjectId: Leave this field empty.
-- resource group: Introduce the unique name for your resource group (example: rg-user01-yourinitials).
-
-**NOTE:** Some parts of your deployment may fail if the resource provider `Microsoft.AlertsManagement` is not registered in your. Follow the [documentation](https://learn.microsoft.com/en-us/azure/azure-resource-manager/management/resource-providers-and-types#register-resource-provider-1) to register it and the re-run the deployment.
-
-Resource deployment can take up to 10 minutes, afterwards you'll be able to find most of the resources on your resource group. 
-
-## 1.4 Verify the creation of your resources
-
-Go back to your `Azure Portal` and find your `Resource Group`that should by now contain 9 resources and look like this:
-
-![alt text](image.png)
-
-## 1.5 Let's retrieve the necessary keys
-After deploying the resources, you will need to configure the environment variables in the `.env` file. Double check you have logged in into your Azure account on the CLI. If that's settled, let's move into retrieving our keys. The `.env` file is a configuration file that contains the environment variables for the application. The `.env` file is automatically created by running the following command within the terminal in your Codespace.
+## 1.4 Let's retrieve the necessary keys
+After logging in, you will need to configure the environment variables in the `.env` file. The `.env` file is a configuration file that contains the environment variables for the application. The `.env` file is automatically created by running the following command within the terminal in your Codespace.
 
 **Then run the get-keys script with your resource group name:**
 ```bash
 cd challenge-0 && ./get-keys.sh --resource-group YOUR_RESOURCE_GROUP_NAME
 ```
 
-Replace `YOUR_RESOURCE_GROUP_NAME` with the actual name of the resource group created on step 1.3.
+Replace `YOUR_RESOURCE_GROUP_NAME` with the name of the resource group that was provided to you.
 
 This script will connect to Azure and fetch the necessary keys and populate the `.env` file with the required values in the root directory of the repository.
 
-## 1.6 Verify `.env` setup
+## 1.5 Verify `.env` setup
 
 When the script is finished, review the `.env` file to ensure that all the values are correct. If you need to make any changes, you can do so manually.
 

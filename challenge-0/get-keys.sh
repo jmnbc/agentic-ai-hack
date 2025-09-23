@@ -1,319 +1,360 @@
 #!/bin/bash
-#
-# This script will retrieve necessary keys and properties from Azure Resources 
-# deployed using "Deploy to Azure" button and will store them in a file named
-# ".env" in the parent directory.
 
-# Login to Azure
-if [ -z "$(az account show)" ]; then
-  echo "User not signed in Azure. Signin to Azure using 'az login' command."
-  az login --use-device-code
-fi
+set -euo pipefail
 
-# Get the resource group name from the script parameter named resource-group
-resourceGroupName=""
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ENV_FILE="${SCRIPT_DIR}/../.env"
 
-# Parse named parameters
-while [[ "$#" -gt 0 ]]; do
-    case $1 in
-        --resource-group) resourceGroupName="$2"; shift ;;
-        *) echo "Unknown parameter passed: $1"; exit 1 ;;
-    esac
-    shift
+USER_KEY=""
+SHARED_RG="rg-aihack-shared"
+USER_RG=""
+
+print_usage() {
+  echo "Usage: $0 [--user <user_key>] [--shared-rg <rg-name>] [--user-rg <rg-name>]" 1>&2
+  echo "  --user: User key (e.g., user1). If not provided, will auto-discover from Owner role assignments" 1>&2
+}
+
+# Parse args
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --user)
+      USER_KEY="$2"; shift 2 ;;
+    --shared-rg)
+      SHARED_RG="$2"; shift 2 ;;
+    --user-rg)
+      USER_RG="$2"; shift 2 ;;
+    -h|--help)
+      print_usage; exit 0 ;;
+    *)
+      echo "Unknown argument: $1" 1>&2
+      print_usage; exit 1 ;;
+  esac
 done
 
-# Check if resourceGroupName is provided
-if [ -z "$resourceGroupName" ]; then
-    echo "Enter the resource group name where the resources are deployed:"
-    read resourceGroupName
-fi
-
-# Get resource group deployments, find deployments starting with 'Microsoft.Template' and sort them by timestamp
-echo "Getting the deployments in '$resourceGroupName'..."
-deploymentName=$(az deployment group list --resource-group $resourceGroupName --query "[?contains(name, 'Microsoft.Template') || contains(name, 'azuredeploy')].{name:name}[0].name" --output tsv)
-if [ $? -ne 0 ]; then
-    echo "Error occurred while fetching deployments. Exiting..."
+# Auto-discover user if not provided (similar to get-keys-bak.sh)
+if [[ -z "${USER_KEY}" ]]; then
+  echo "Auto-discovering user from Owner role assignments..."
+  current_user=$(az account show --query user.name -o tsv 2>/dev/null || echo "")
+  if [[ -n "$current_user" ]]; then
+    # Try to find user key from Owner role assignments
+    owner_scope=$(az role assignment list --assignee "$current_user" --role "Owner" --query "[?contains(scope, '/resourceGroups/')].scope | [0]" -o tsv 2>/dev/null || echo "")
+    if [[ -n "$owner_scope" && "$owner_scope" != "null" ]]; then
+      # Extract user key from RG name like "rg-aihack-user1" -> "user1"
+      rg_name=$(echo "$owner_scope" | awk -F'/' '{print $NF}')
+      if [[ "$rg_name" =~ ^rg-aihack-(.+)$ ]]; then
+        USER_KEY="${BASH_REMATCH[1]}"
+        echo "Auto-discovered user: $USER_KEY"
+      fi
+    fi
+  fi
+  
+  # Fallback: try to find any rg-aihack-* resource group
+  if [[ -z "$USER_KEY" ]]; then
+    fallback_rg=$(az group list --query "[?contains(name, 'rg-aihack-')].name | [0]" -o tsv 2>/dev/null || echo "")
+    if [[ -n "$fallback_rg" && "$fallback_rg" != "null" ]]; then
+      if [[ "$fallback_rg" =~ ^rg-aihack-(.+)$ ]]; then
+        USER_KEY="${BASH_REMATCH[1]}"
+        echo "Auto-discovered user from fallback RG: $USER_KEY"
+      fi
+    fi
+  fi
+  
+  if [[ -z "$USER_KEY" ]]; then
+    echo "Could not auto-discover user. Please provide --user <user_key>" 1>&2
     exit 1
+  fi
 fi
 
-# Get output parameters from last deployment using Azure CLI queries instead of jq
-echo "Getting the output parameters from the last deployment '$deploymentName' in '$resourceGroupName'..."
-
-# Extract the resource names directly using Azure CLI queries
-echo "Extracting the resource names from the deployment outputs..."
-storageAccountName=$(az deployment group show --resource-group $resourceGroupName --name $deploymentName --query "properties.outputs.storageAccountName.value" -o tsv 2>/dev/null || echo "")
-logAnalyticsWorkspaceName=$(az deployment group show --resource-group $resourceGroupName --name $deploymentName --query "properties.outputs.logAnalyticsWorkspaceName.value" -o tsv 2>/dev/null || echo "")
-if [ -z "$logAnalyticsWorkspaceName" ]; then
-    echo "No Log Analytics workspace found. Please enter the workspace name manually:"
-    read logAnalyticsWorkspaceName
-fi
-logAnalyticsWorkspaceId=$(az monitor log-analytics workspace show --resource-group $resourceGroupName --workspace-name $logAnalyticsWorkspaceName --query customerId -o tsv 2>/dev/null || echo "")
-searchServiceName=$(az deployment group show --resource-group $resourceGroupName --name $deploymentName --query "properties.outputs.searchServiceName.value" -o tsv 2>/dev/null || echo "")
-aiFoundryHubName=$(az deployment group show --resource-group $resourceGroupName --name $deploymentName --query "properties.outputs.aiFoundryHubName.value" -o tsv 2>/dev/null || echo "")
-aiFoundryProjectName=$(az deployment group show --resource-group $resourceGroupName --name $deploymentName --query "properties.outputs.aiFoundryProjectName.value" -o tsv 2>/dev/null || echo "")
-keyVaultName=$(az deployment group show --resource-group $resourceGroupName --name $deploymentName --query "properties.outputs.keyVaultName.value" -o tsv 2>/dev/null || echo "")
-containerRegistryName=$(az deployment group show --resource-group $resourceGroupName --name $deploymentName --query "properties.outputs.containerRegistryName.value" -o tsv 2>/dev/null || echo "")
-applicationInsightsName=$(az deployment group show --resource-group $resourceGroupName --name $deploymentName --query "properties.outputs.applicationInsightsName.value" -o tsv 2>/dev/null || echo "")
-
-# Extract endpoint URLs
-searchServiceEndpoint=$(az deployment group show --resource-group $resourceGroupName --name $deploymentName --query "properties.outputs.searchServiceEndpoint.value" -o tsv 2>/dev/null || echo "")
-aiFoundryHubEndpoint=$(az deployment group show --resource-group $resourceGroupName --name $deploymentName --query "properties.outputs.aiFoundryHubEndpoint.value" -o tsv 2>/dev/null || echo "")
-aiFoundryProjectEndpoint=$(az deployment group show --resource-group $resourceGroupName --name $deploymentName --query "properties.outputs.aiFoundryProjectEndpoint.value" -o tsv 2>/dev/null || echo "")
-
-
-
-# If deployment outputs are empty, try to discover resources by type
-if [ -z "$storageAccountName" ] || [ -z "$logAnalyticsWorkspaceName" ] || [ -z "$apiManagementName" ] || [ -z "$keyVaultName" ] || [ -z "$containerRegistryName" ]; then
-    echo "Some deployment outputs not found, discovering missing resources by type..."
-    
-    if [ -z "$storageAccountName" ]; then
-        storageAccountName=$(az storage account list --resource-group $resourceGroupName --query "[0].name" -o tsv 2>/dev/null || echo "")
-    fi
-    
-    if [ -z "$logAnalyticsWorkspaceName" ]; then
-        logAnalyticsWorkspaceName=$(az monitor log-analytics workspace list --resource-group $resourceGroupName --query "[0].name" -o tsv 2>/dev/null || echo "")
-    fi
-    
-    if [ -z "$searchServiceName" ]; then
-        searchServiceName=$(az search service list --resource-group $resourceGroupName --query "[0].name" -o tsv 2>/dev/null || echo "")
-    fi
-    
-    if [ -z "$apiManagementName" ]; then
-        apiManagementName=$(az apim list --resource-group $resourceGroupName --query "[0].name" -o tsv 2>/dev/null || echo "")
-    fi
-    
-    if [ -z "$aiFoundryHubName" ]; then
-        aiFoundryHubName=$(az cognitiveservices account list --resource-group $resourceGroupName --query "[?kind=='AIServices'].name | [0]" -o tsv 2>/dev/null || echo "")
-    fi
-    
-    if [ -z "$keyVaultName" ]; then
-        keyVaultName=$(az keyvault list --resource-group $resourceGroupName --query "[0].name" -o tsv 2>/dev/null || echo "")
-    fi
-    
-    if [ -z "$containerRegistryName" ]; then
-        containerRegistryName=$(az acr list --resource-group $resourceGroupName --query "[0].name" -o tsv 2>/dev/null || echo "")
-    fi
-    
-    if [ -z "$applicationInsightsName" ]; then
-        applicationInsightsName=$(az resource list --resource-group $resourceGroupName --resource-type "Microsoft.Insights/components" --query "[0].name" -o tsv 2>/dev/null || echo "")
-    fi
+if [[ -z "${USER_RG}" ]]; then
+  USER_RG="rg-aihack-${USER_KEY}"
 fi
 
-# Get Cosmos DB service information (better retrieval)
-echo "Getting Cosmos DB service information..."
-cosmosDbAccountName=$(az deployment group show --resource-group $resourceGroupName --name $deploymentName --query "properties.outputs.cosmosDbAccountName.value" -o tsv 2>/dev/null || echo "")
-if [ -z "$cosmosDbAccountName" ]; then
-    cosmosDbAccountName=$(az cosmosdb list --resource-group $resourceGroupName --query "[0].name" -o tsv 2>/dev/null || echo "")
+echo "Checking Azure CLI login status..."
+if ! az account show &>/dev/null; then
+  echo "You are not logged in to Azure CLI. Initiating login..."
+  az login --use-device-code 1>/dev/null
 fi
 
-if [ -n "$cosmosDbAccountName" ]; then
-    cosmosDbEndpoint=$(az cosmosdb show --name $cosmosDbAccountName --resource-group $resourceGroupName --query documentEndpoint -o tsv 2>/dev/null || echo "")
-    cosmosDbKey=$(az cosmosdb keys list --name $cosmosDbAccountName --resource-group $resourceGroupName --query primaryMasterKey -o tsv 2>/dev/null || echo "")
-    
-    # Construct the connection string properly
-    if [ -n "$cosmosDbEndpoint" ] && [ -n "$cosmosDbKey" ]; then
-        cosmosDbConnectionString="AccountEndpoint=${cosmosDbEndpoint};AccountKey=${cosmosDbKey};"
+subscription_id=$(az account show --query id -o tsv 2>/dev/null || echo "")
+tenant_id=$(az account show --query tenantId -o tsv 2>/dev/null || echo "")
+current_user=$(az account show --query user.name -o tsv 2>/dev/null || echo "")
+
+# Auto-discover resource groups similar to get-keys-bak.sh
+echo "Discovering shared and user resource groups..."
+# Shared RG: prefer exact, fallback to contains 'shared'
+if ! az group show --name "$SHARED_RG" &>/dev/null; then
+  det_shared=$(az group list --query "[?name == 'rg-aihack-shared'].name | [0]" -o tsv 2>/dev/null || echo "")
+  if [[ -z "$det_shared" || "$det_shared" == "null" ]]; then
+    det_shared=$(az group list --query "[?contains(name, 'shared')].name | [0]" -o tsv 2>/dev/null || echo "")
+  fi
+  if [[ -n "$det_shared" && "$det_shared" != "null" ]]; then
+    SHARED_RG="$det_shared"
+  fi
+fi
+
+# User RG: try Owner assignment scope, then heuristics with user key
+if ! az group show --name "$USER_RG" &>/dev/null; then
+  if [[ -n "$current_user" ]]; then
+    owner_scope=$(az role assignment list --assignee "$current_user" --role "Owner" --query "[?contains(scope, '/resourceGroups/')].scope | [0]" -o tsv 2>/dev/null || echo "")
+    if [[ -n "$owner_scope" && "$owner_scope" != "null" ]]; then
+      USER_RG=$(echo "$owner_scope" | awk -F'/' '{print $NF}')
     else
-        cosmosDbConnectionString=""
+      cand=$(az group list --query "[?contains(name, '${USER_KEY}')].name | [0]" -o tsv 2>/dev/null || echo "")
+      if [[ -z "$cand" || "$cand" == "null" ]]; then
+        cand=$(az group list --query "[?contains(name, 'rg-aihack')].name | [0]" -o tsv 2>/dev/null || echo "")
+      fi
+      if [[ -n "$cand" && "$cand" != "null" ]]; then
+        USER_RG="$cand"
+      fi
     fi
-else
-    echo "Warning: No Cosmos DB account found in resource group. You may need to deploy one."
-    cosmosDbEndpoint=""
-    cosmosDbKey=""
-    cosmosDbConnectionString=""
+  fi
 fi
 
-# Get the keys from the resources
-echo "Getting the keys from the resources..."
+echo "Using SHARED_RG='${SHARED_RG}', USER_RG='${USER_RG}'"
 
-# Storage account
-if [ -n "$storageAccountName" ]; then
-    storageAccountKey=$(az storage account keys list --account-name $storageAccountName --resource-group $resourceGroupName --query "[0].value" -o tsv 2>/dev/null || echo "")
-    # Construct the connection string in the correct format
-    storageAccountConnectionString="DefaultEndpointsProtocol=https;AccountName=${storageAccountName};AccountKey=${storageAccountKey};EndpointSuffix=core.windows.net"
-else
-    echo "Warning: Storage account not found"
-    storageAccountKey=""
-    storageAccountConnectionString=""
+# Helper to safely run az and return empty string on error
+az_safe() {
+  local cmd="$1"
+  bash -lc "$cmd" 2>/dev/null || true
+}
+
+echo "Discovering shared and user resources..."
+
+# Shared resources (in parallel where possible)
+shared_resources=$(az_safe "az resource list --resource-group ${SHARED_RG} --query '[].{name:name,type:type}' -o tsv")
+
+get_res_name_by_type() {
+  local list="$1"; local type="$2"
+  echo "$list" | awk -v type="$type" '$2 == type {print $1; exit}'
+}
+
+storage_shared_name=$(get_res_name_by_type "$shared_resources" "Microsoft.Storage/storageAccounts")
+ml_hub_name=$(get_res_name_by_type "$shared_resources" "Microsoft.MachineLearningServices/workspaces")
+acr_name=$(get_res_name_by_type "$shared_resources" "Microsoft.ContainerRegistry/registries")
+appins_name=$(get_res_name_by_type "$shared_resources" "Microsoft.Insights/components")
+kv_name=$(get_res_name_by_type "$shared_resources" "Microsoft.KeyVault/vaults")
+apim_name=$(get_res_name_by_type "$shared_resources" "Microsoft.ApiManagement/service")
+
+# Find AIServices account (AI Foundry)
+foundry_names=$(echo "$shared_resources" | awk '$2 == "Microsoft.CognitiveServices/accounts" {print $1}')
+foundry_name=""
+for acc in $foundry_names; do
+  kind=$(az_safe "az cognitiveservices account show --name ${acc} --resource-group ${SHARED_RG} --query kind -o tsv")
+  if [[ "$kind" == "AIServices" ]]; then
+    foundry_name="$acc"
+    break
+  fi
+done
+
+# User RG resources
+user_resources=$(az_safe "az resource list --resource-group ${USER_RG} --query '[].{name:name,type:type}' -o tsv") || true
+search_name=$(get_res_name_by_type "$user_resources" "Microsoft.Search/searchServices")
+log_analytics_name=$(get_res_name_by_type "$user_resources" "Microsoft.OperationalInsights/workspaces")
+cosmos_name=$(get_res_name_by_type "$user_resources" "Microsoft.DocumentDB/databaseAccounts")
+
+# Prefer shared storage; fallback to user RG storage if shared not found
+storage_name="$storage_shared_name"
+storage_rg="$SHARED_RG"
+if [[ -z "$storage_name" || "$storage_name" == "null" ]]; then
+  storage_user_name=$(get_res_name_by_type "$user_resources" "Microsoft.Storage/storageAccounts")
+  if [[ -n "$storage_user_name" && "$storage_user_name" != "null" ]]; then
+    storage_name="$storage_user_name"
+    storage_rg="$USER_RG"
+  fi
 fi
 
-# AI Foundry/Cognitive Services
-if [ -n "$aiFoundryHubName" ]; then
-    aiFoundryEndpoint=$(az cognitiveservices account show --name $aiFoundryHubName --resource-group $resourceGroupName --query properties.endpoint -o tsv 2>/dev/null || echo "")
-    aiFoundryKey=$(az cognitiveservices account keys list --name $aiFoundryHubName --resource-group $resourceGroupName --query key1 -o tsv 2>/dev/null || echo "")
-else
-    echo "Warning: AI Foundry Hub not found"
-    aiFoundryEndpoint=""
-    aiFoundryKey=""
+# Keys and endpoints (parallelizable via subshells)
+tmpdir="$(mktemp -d)"
+(
+  if [[ -n "$storage_name" ]]; then
+    az storage account keys list --account-name "$storage_name" --resource-group "$storage_rg" --query "[0].value" -o tsv 2>/dev/null >"$tmpdir/storage_key" || true
+  fi
+) &
+(
+  if [[ -n "$search_name" ]]; then
+    az search admin-key show --service-name "$search_name" --resource-group "$USER_RG" --query primaryKey -o tsv 2>/dev/null >"$tmpdir/search_key" || true
+  fi
+) &
+(
+  if [[ -n "$cosmos_name" ]]; then
+    az cosmosdb show --name "$cosmos_name" --resource-group "$USER_RG" --query documentEndpoint -o tsv 2>/dev/null >"$tmpdir/cosmos_ep" || true
+    az cosmosdb keys list --name "$cosmos_name" --resource-group "$USER_RG" --query primaryMasterKey -o tsv 2>/dev/null >"$tmpdir/cosmos_key" || true
+  fi
+) &
+(
+  if [[ -n "$foundry_name" ]]; then
+    az cognitiveservices account show --name "$foundry_name" --resource-group "$SHARED_RG" --query properties.endpoint -o tsv 2>/dev/null >"$tmpdir/foundry_ep" || true
+    az cognitiveservices account keys list --name "$foundry_name" --resource-group "$SHARED_RG" --query key1 -o tsv 2>/dev/null >"$tmpdir/foundry_key" || true
+    az cognitiveservices account deployment list --name "$foundry_name" --resource-group "$SHARED_RG" --query "[?contains(name, 'gpt')].name | [0]" -o tsv 2>/dev/null >"$tmpdir/gpt_dep" || true
+    az cognitiveservices account deployment list --name "$foundry_name" --resource-group "$SHARED_RG" --query "[?contains(name, 'embedding')].name | [0]" -o tsv 2>/dev/null >"$tmpdir/emb_dep" || true
+  fi
+) &
+(
+  if [[ -n "$acr_name" ]]; then
+    az acr credential show --name "$acr_name" --query username -o tsv 2>/dev/null >"$tmpdir/acr_user" || true
+    az acr credential show --name "$acr_name" --query passwords[0].value -o tsv 2>/dev/null >"$tmpdir/acr_pass" || true
+  fi
+) &
+wait
+
+storage_key=$(cat "$tmpdir/storage_key" 2>/dev/null || echo "")
+search_key=$(cat "$tmpdir/search_key" 2>/dev/null || echo "")
+cosmos_ep=$(cat "$tmpdir/cosmos_ep" 2>/dev/null || echo "")
+cosmos_key=$(cat "$tmpdir/cosmos_key" 2>/dev/null || echo "")
+foundry_ep=$(cat "$tmpdir/foundry_ep" 2>/dev/null || echo "")
+foundry_key=$(cat "$tmpdir/foundry_key" 2>/dev/null || echo "")
+gpt_dep=$(cat "$tmpdir/gpt_dep" 2>/dev/null || echo "")
+emb_dep=$(cat "$tmpdir/emb_dep" 2>/dev/null || echo "")
+acr_user=$(cat "$tmpdir/acr_user" 2>/dev/null || echo "")
+acr_pass=$(cat "$tmpdir/acr_pass" 2>/dev/null || echo "")
+
+# Defaults
+if [[ -z "$gpt_dep" || "$gpt_dep" == "null" ]]; then
+  gpt_dep="gpt-4.1-mini"
 fi
 
-# Search service
-if [ -n "$searchServiceName" ]; then
-    searchServiceKey=$(az search admin-key show --resource-group $resourceGroupName --service-name $searchServiceName --query primaryKey -o tsv 2>/dev/null || echo "")
-    if [ -z "$searchServiceEndpoint" ]; then
-        searchServiceEndpoint="https://${searchServiceName}.search.windows.net"
-    fi
-else
-    echo "Warning: Search service not found"
-    searchServiceKey=""
-    searchServiceEndpoint=""
+# AI Foundry Hub endpoint (ML Studio) from ML workspace
+ai_foundry_hub_endpoint=""
+if [[ -n "$ml_hub_name" && -n "$subscription_id" ]]; then
+  ai_foundry_hub_endpoint="https://ml.azure.com/home?wsid=/subscriptions/${subscription_id}/resourceGroups/${SHARED_RG}/providers/Microsoft.MachineLearningServices/workspaces/${ml_hub_name}"
 fi
 
-# Application Insights
-if [ -n "$applicationInsightsName" ]; then
-    appInsightsInstrumentationKey=$(az resource show --resource-group $resourceGroupName --name $applicationInsightsName --resource-type "Microsoft.Insights/components" --query properties.InstrumentationKey -o tsv 2>/dev/null || echo "")
-else
-    echo "Warning: Application Insights not found"
-    appInsightsInstrumentationKey=""
-fi
+# AI Project discovery under Foundry account
+ai_project_name=""
+if [[ -n "$foundry_name" && -n "$subscription_id" ]]; then
+  # Prefer the resource name and extract the short project name (avoid displayName which may include suffixes)
+  full_project_name=$(az rest --method get \
+    --url "https://management.azure.com/subscriptions/${subscription_id}/resourceGroups/${SHARED_RG}/providers/Microsoft.CognitiveServices/accounts/${foundry_name}/projects?api-version=2025-06-01" \
+    --query "value[0].name" -o tsv 2>/dev/null || echo "")
 
-# Get Azure AI Search connection ID
-# Note: The 'az cognitiveservices account connection' command is not available in all Azure CLI versions
-# We'll construct the connection ID manually later in the script
-echo "Skipping Azure AI Search connection query (will construct manually)..."
-azureAIConnectionId=""
-
-
-if [ -z "$storageAccountName" ] || [ -z "$aiFoundryProjectName" ]; then
-    if [ -z "$storageAccountName" ]; then
-        echo "Deployment outputs not found, discovering resources by type..."
-    fi
-    if [ -z "$aiFoundryProjectName" ]; then
-        echo "AI Foundry Project Name not found in deployment outputs, attempting discovery..."
-    fi
-    
-    storageAccountName=$(az storage account list --resource-group $resourceGroupName --query "[0].name" -o tsv 2>/dev/null || echo "")
-    searchServiceName=$(az search service list --resource-group $resourceGroupName --query "[0].name" -o tsv 2>/dev/null || echo "")
-    aiFoundryHubName=$(az cognitiveservices account list --resource-group $resourceGroupName --query "[?kind=='AIServices'].name | [0]" -o tsv 2>/dev/null || echo "")
-    applicationInsightsName=$(az resource list --resource-group $resourceGroupName --resource-type "Microsoft.Insights/components" --query "[0].name" -o tsv 2>/dev/null || echo "")
-fi
-
-# Construct Azure AI Search connection ID directly
-if [ -n "$aiFoundryHubName" ] && [ -n "$searchServiceName" ]; then
-    echo "Constructing Azure AI Search connection ID..."
-    
-    # Get subscription ID
-    subscriptionId=$(az account show --query id -o tsv 2>/dev/null || echo "")
-    
-    if [ -n "$subscriptionId" ]; then
-        # Construct the connection ID based on the pattern: aiFoundryHubName + "-aisearch"
-        # Pattern: /subscriptions/{subscription}/resourceGroups/{rg}/providers/Microsoft.CognitiveServices/accounts/{aiFoundryHub}/connections/{aiFoundryHub}-aisearch
-        azureAIConnectionId="/subscriptions/${subscriptionId}/resourceGroups/${resourceGroupName}/providers/Microsoft.CognitiveServices/accounts/${aiFoundryHubName}/connections/${aiFoundryHubName}-aisearch"
-        echo "Constructed connection ID: $azureAIConnectionId"
+  # Extract short name from formats like "hub-name/my-ai-project" → "my-ai-project"
+  if [[ -n "$full_project_name" && "$full_project_name" != "null" ]]; then
+    if [[ "$full_project_name" == */* ]]; then
+      ai_project_name="${full_project_name##*/}"
     else
-        echo "Warning: Could not get subscription ID"
-        azureAIConnectionId=""
+      ai_project_name="$full_project_name"
     fi
-else
-    echo "Warning: Cannot construct Azure AI connection ID - AI Foundry Hub or Search Service not found"
-    azureAIConnectionId=""
+  fi
+
+  # Strip any accidental suffix like " AI Project"
+  if [[ "$ai_project_name" == *" AI Project" ]]; then
+    ai_project_name="${ai_project_name% AI Project}"
+  fi
+
+  # Final fallback
+  if [[ -z "$ai_project_name" || "$ai_project_name" == "null" ]]; then
+    ai_project_name="${USER_KEY}-project"
+  fi
 fi
 
-# Construct AI Foundry Project Endpoint if not found in deployment outputs
-if [ -z "$aiFoundryProjectEndpoint" ] && [ -n "$aiFoundryHubName" ] && [ -n "$aiFoundryProjectName" ]; then
-    echo "Constructing AI Foundry Project Endpoint..."
-    aiFoundryProjectEndpoint="https://${aiFoundryHubName}.services.ai.azure.com/api/projects/${aiFoundryProjectName}"
-    echo "Constructed project endpoint: $aiFoundryProjectEndpoint"
-elif [ -n "$aiFoundryProjectEndpoint" ] && [[ "$aiFoundryProjectEndpoint" == *"ai.azure.com/build/overview"* ]]; then
-    # If we got a web UI URL from deployment outputs, convert it to API endpoint
-    echo "Converting web UI URL to API endpoint..."
-    aiFoundryProjectEndpoint="https://${aiFoundryHubName}.services.ai.azure.com/api/projects/${aiFoundryProjectName}"
-    echo "Converted project endpoint: $aiFoundryProjectEndpoint"
+# Azure AI Search connection ID: select the project-level CognitiveSearch connection created by Terraform
+azure_ai_connection_id=""
+if [[ -n "$foundry_name" && -n "$ai_project_name" && -n "$subscription_id" ]]; then
+  # Prefer connection explicitly named "<user>-search-connection"
+  project_sc_id=$(az rest --method get \
+    --url "https://management.azure.com/subscriptions/${subscription_id}/resourceGroups/${SHARED_RG}/providers/Microsoft.CognitiveServices/accounts/${foundry_name}/projects/${ai_project_name}/connections?api-version=2025-06-01" \
+    --query "value[?name == '${USER_KEY}-search-connection'].id | [0]" -o tsv 2>/dev/null || echo "")
+
+  # Fallback: first connection with category == 'CognitiveSearch'
+  if [[ -z "$project_sc_id" || "$project_sc_id" == "null" ]]; then
+    project_sc_id=$(az rest --method get \
+      --url "https://management.azure.com/subscriptions/${subscription_id}/resourceGroups/${SHARED_RG}/providers/Microsoft.CognitiveServices/accounts/${foundry_name}/projects/${ai_project_name}/connections?api-version=2025-06-01" \
+      --query "value[?properties.category == 'CognitiveSearch'].id | [0]" -o tsv 2>/dev/null || echo "")
+  fi
+
+  if [[ -n "$project_sc_id" && "$project_sc_id" != "null" ]]; then
+    azure_ai_connection_id="$project_sc_id"
+  fi
 fi
 
-# Overwrite the existing .env file
-if [ -f ../.env ]; then
-    rm ../.env
+# Compose connection strings
+storage_conn_str=""
+if [[ -n "$storage_name" && -n "$storage_key" ]]; then
+  storage_conn_str="DefaultEndpointsProtocol=https;AccountName=${storage_name};AccountKey=${storage_key};EndpointSuffix=core.windows.net"
 fi
 
-# Store the keys and properties in a file
-echo "Storing the keys and properties in '.env' file..."
-
-# Azure Storage (with both naming conventions)
-echo "AZURE_STORAGE_ACCOUNT_NAME=\"$storageAccountName\"" >> ../.env
-echo "AZURE_STORAGE_ACCOUNT_KEY=\"$storageAccountKey\"" >> ../.env
-echo "AZURE_STORAGE_CONNECTION_STRING=\"$storageAccountConnectionString\"" >> ../.env
-
-# Other Azure services
-echo "LOG_ANALYTICS_WORKSPACE_NAME=\"$logAnalyticsWorkspaceName\"" >> ../.env
-echo "SEARCH_SERVICE_NAME=\"$searchServiceName\"" >> ../.env
-echo "SEARCH_SERVICE_ENDPOINT=\"$searchServiceEndpoint\"" >> ../.env
-echo "SEARCH_ADMIN_KEY=\"$searchServiceKey\"" >> ../.env
-echo "AI_FOUNDRY_HUB_NAME=\"$aiFoundryHubName\"" >> ../.env
-echo "AI_FOUNDRY_PROJECT_NAME=\"$aiFoundryProjectName\"" >> ../.env
-echo "AI_FOUNDRY_ENDPOINT=\"$aiFoundryEndpoint\"" >> ../.env
-echo "AI_FOUNDRY_KEY=\"$aiFoundryKey\"" >> ../.env
-acr_username=$(az acr credential show --name $containerRegistryName --query username -o tsv)
-acr_password=$(az acr credential show --name $containerRegistryName --query passwords[0].value -o tsv)
-# Construct AI Foundry Hub Endpoint if missing
-if [ -z "$aiFoundryHubEndpoint" ] && [ -n "$aiFoundryHubName" ]; then
-    echo "Constructing AI Foundry Hub Endpoint..."
-    subscriptionId=$(az account show --query id -o tsv 2>/dev/null || echo "")
-    if [ -n "$subscriptionId" ]; then
-        aiFoundryHubEndpoint="https://ml.azure.com/home?wsid=/subscriptions/${subscriptionId}/resourceGroups/${resourceGroupName}/providers/Microsoft.CognitiveServices/accounts/${aiFoundryHubName}"
-        echo "Constructed hub endpoint: $aiFoundryHubEndpoint"
-    fi
+cosmos_conn_str=""
+if [[ -n "$cosmos_ep" && -n "$cosmos_key" ]]; then
+  cosmos_conn_str="AccountEndpoint=${cosmos_ep};AccountKey=${cosmos_key};"
 fi
-echo "AI_FOUNDRY_HUB_ENDPOINT=\"$aiFoundryHubEndpoint\"" >> ../.env
 
-# Construct AI Foundry Project Endpoint if not found in deployment outputs
-if [ -z "$aiFoundryProjectEndpoint" ] && [ -n "$aiFoundryHubName" ] && [ -n "$aiFoundryProjectName" ]; then
-    echo "Constructing AI Foundry Project Endpoint..."
-    aiFoundryProjectEndpoint="https://${aiFoundryHubName}.services.ai.azure.com/api/projects/${aiFoundryProjectName}"
-    echo "Constructed project endpoint: $aiFoundryProjectEndpoint"
-elif [ -n "$aiFoundryProjectEndpoint" ] && [[ "$aiFoundryProjectEndpoint" == *"ai.azure.com/build/overview"* ]]; then
-    # If we got a web UI URL from deployment outputs, convert it to API endpoint
-    echo "Converting web UI URL to API endpoint..."
-    aiFoundryProjectEndpoint="https://${aiFoundryHubName}.services.ai.azure.com/api/projects/${aiFoundryProjectName}"
-    echo "Converted project endpoint: $aiFoundryProjectEndpoint"
+search_endpoint=""
+if [[ -n "$search_name" ]]; then
+  search_endpoint="https://${search_name}.search.windows.net"
 fi
-echo "AI_FOUNDRY_PROJECT_ENDPOINT=\"$aiFoundryProjectEndpoint\"" >> ../.env
-echo "AZURE_AI_CONNECTION_ID=\"$azureAIConnectionId\"" >> ../.env
-# Azure Cosmos DB
-echo "COSMOS_ENDPOINT=\"$cosmosDbEndpoint\"" >> ../.env
-echo "COSMOS_KEY=\"$cosmosDbKey\"" >> ../.env
-echo "COSMOS_CONNECTION_STRING=\"$cosmosDbConnectionString\"" >> ../.env
 
-# For backward compatibility, also set OpenAI-style variables pointing to AI Foundry
-echo "AZURE_OPENAI_SERVICE_NAME=\"$aiFoundryHubName\"" >> ../.env
-echo "AZURE_OPENAI_ENDPOINT=\"$aiFoundryEndpoint\"" >> ../.env
-echo "AZURE_OPENAI_KEY=\"$aiFoundryKey\"" >> ../.env
-echo "AZURE_OPENAI_DEPLOYMENT_NAME=\"gpt-4.1-mini\"" >> ../.env
-echo "MODEL_DEPLOYMENT_NAME=\"gpt-4.1-mini\"" >> ../.env
+# AI Foundry Project API endpoint
+ai_foundry_project_endpoint=""
+if [[ -n "$foundry_name" && -n "$ai_project_name" ]]; then
+  ai_foundry_project_endpoint="https://${foundry_name}.services.ai.azure.com/api/projects/${ai_project_name}"
+fi
+
+# Write .env
+rm -f "$ENV_FILE"
+{
+  echo "AZURE_STORAGE_ACCOUNT_NAME=\"$storage_name\""
+  echo "AZURE_STORAGE_ACCOUNT_KEY=\"$storage_key\""
+  echo "AZURE_STORAGE_CONNECTION_STRING=\"$storage_conn_str\""
+
+  echo "LOG_ANALYTICS_WORKSPACE_NAME=\"$log_analytics_name\""
+  echo "SEARCH_SERVICE_NAME=\"$search_name\""
+  echo "SEARCH_SERVICE_ENDPOINT=\"$search_endpoint\""
+  echo "SEARCH_ADMIN_KEY=\"$search_key\""
+
+  echo "AI_FOUNDRY_HUB_NAME=\"$foundry_name\""
+  echo "AI_FOUNDRY_PROJECT_NAME=\"$ai_project_name\""
+  echo "AI_FOUNDRY_ENDPOINT=\"$foundry_ep\""
+  echo "AI_FOUNDRY_KEY=\"$foundry_key\""
+  echo "AI_FOUNDRY_HUB_ENDPOINT=\"$ai_foundry_hub_endpoint\""
+  echo "AI_FOUNDRY_PROJECT_ENDPOINT=\"$ai_foundry_project_endpoint\""
+  echo "AZURE_AI_CONNECTION_ID=\"$azure_ai_connection_id\""
+
+  echo "COSMOS_ENDPOINT=\"$cosmos_ep\""
+  echo "COSMOS_KEY=\"$cosmos_key\""
+  echo "COSMOS_CONNECTION_STRING=\"$cosmos_conn_str\""
+
+  # Back-compat OpenAI-style variables pointing to AI Foundry
+  echo "AZURE_OPENAI_SERVICE_NAME=\"$foundry_name\""
+  echo "AZURE_OPENAI_ENDPOINT=\"$foundry_ep\""
+  echo "AZURE_OPENAI_KEY=\"$foundry_key\""
+  echo "AZURE_OPENAI_DEPLOYMENT_NAME=\"$gpt_dep\""
+  echo "MODEL_DEPLOYMENT_NAME=\"$gpt_dep\""
+
+  echo "ACR_NAME=\"$acr_name\""
+  echo "ACR_USERNAME=\"$acr_user\""
+  echo "ACR_PASSWORD=\"$acr_pass\""
+} >> "$ENV_FILE"
 
 echo "Keys and properties are stored in '.env' file successfully."
 
-# Display summary of what was configured
 echo ""
 echo "=== Configuration Summary ==="
-echo "Storage Account: $storageAccountName"
-echo "Log Analytics Workspace: $logAnalyticsWorkspaceName"
-echo "Search Service: $searchServiceName"
-echo "API Management: $apiManagementName"
-echo "AI Foundry Hub: $aiFoundryHubName"
-echo "AI Foundry Project: $aiFoundryProjectName"
-echo "Key Vault: $keyVaultName"
-echo "Container Registry: $containerRegistryName"
-echo "Application Insights: $applicationInsightsName"
-echo "ACR_NAME=\"$containerRegistryName\"" >> ../.env
-echo "ACR_USERNAME=\"$acr_username\"" >> ../.env
-echo "ACR_PASSWORD=\"$acr_password\"" >> ../.env
-
-if [ -n "$cosmosDbAccountName" ]; then
-    echo "Cosmos DB: $cosmosDbAccountName"
+echo "Shared RG: $SHARED_RG"
+echo "User RG:   $USER_RG"
+echo "Storage Account: $storage_name"
+echo "Log Analytics Workspace: $log_analytics_name"
+echo "Search Service: $search_name"
+echo "API Management: $apim_name"
+echo "AI Foundry (AIServices): $foundry_name"
+echo "AI Foundry Project: $ai_project_name"
+echo "Container Registry: $acr_name"
+if [[ -n "$cosmos_name" ]]; then
+  echo "Cosmos DB: $cosmos_name"
 else
-    echo "Cosmos DB: NOT FOUND - You may need to deploy this service"
+  echo "Cosmos DB: NOT FOUND"
 fi
-echo "Environment file created: ../.env"
+echo "Environment file created: $ENV_FILE"
 
-# Show what needs to be deployed
 missing_services=""
-if [ -z "$storageAccountName" ]; then missing_services="$missing_services Storage"; fi
-if [ -z "$searchServiceName" ]; then missing_services="$missing_services Search"; fi
-if [ -z "$aiFoundryHubName" ]; then missing_services="$missing_services AI-Foundry"; fi
-
-if [ -n "$missing_services" ]; then
-    echo ""
-    echo "⚠️  Missing services:$missing_services"
-    echo "You may need to deploy these services manually or check your deployment template."
+if [[ -z "$storage_shared_name" ]]; then missing_services+=" Storage"; fi
+if [[ -z "$search_name" ]]; then missing_services+=" Search"; fi
+if [[ -z "$foundry_name" ]]; then missing_services+=" AI-Foundry"; fi
+if [[ -n "$missing_services" ]]; then
+  echo ""
+  echo "⚠️  Missing services:${missing_services}"
+  echo "Verify your Terraform deployment or override RG names via flags."
 fi
+
+rm -rf "$tmpdir" 2>/dev/null || true
+
+
