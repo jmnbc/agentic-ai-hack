@@ -130,7 +130,7 @@ get_res_name_by_type() {
 
 storage_shared_name=$(get_res_name_by_type "$shared_resources" "Microsoft.Storage/storageAccounts")
 ml_hub_name=$(get_res_name_by_type "$shared_resources" "Microsoft.MachineLearningServices/workspaces")
-acr_name=$(get_res_name_by_type "$shared_resources" "Microsoft.ContainerRegistry/registries")
+acr_shared_name=$(get_res_name_by_type "$shared_resources" "Microsoft.ContainerRegistry/registries")
 appins_name=$(get_res_name_by_type "$shared_resources" "Microsoft.Insights/components")
 kv_name=$(get_res_name_by_type "$shared_resources" "Microsoft.KeyVault/vaults")
 apim_name=$(get_res_name_by_type "$shared_resources" "Microsoft.ApiManagement/service")
@@ -151,6 +151,22 @@ user_resources=$(az_safe "az resource list --resource-group ${USER_RG} --query '
 search_name=$(get_res_name_by_type "$user_resources" "Microsoft.Search/searchServices")
 log_analytics_name=$(get_res_name_by_type "$user_resources" "Microsoft.OperationalInsights/workspaces")
 cosmos_name=$(get_res_name_by_type "$user_resources" "Microsoft.DocumentDB/databaseAccounts")
+acr_user_name=$(get_res_name_by_type "$user_resources" "Microsoft.ContainerRegistry/registries")
+
+acr_name="$acr_user_name"
+if [[ -z "$acr_name" || "$acr_name" == "null" ]]; then
+  if [[ -n "$USER_KEY" ]]; then
+    candidate="${USER_KEY}acr"
+    candidate_exists=$(az_safe "az acr show --name ${candidate} --query name -o tsv")
+    if [[ -n "$candidate_exists" && "$candidate_exists" != "null" ]]; then
+      acr_name="$candidate_exists"
+    fi
+  fi
+fi
+
+if [[ -z "$acr_name" || "$acr_name" == "null" ]]; then
+  acr_name="$acr_shared_name"
+fi
 
 # Prefer shared storage; fallback to user RG storage if shared not found
 storage_name="$storage_shared_name"
