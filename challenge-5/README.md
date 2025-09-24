@@ -75,7 +75,7 @@ Response body (application/json):
 
 ### Part 2.1 Quick start
 
-   1. **Configure environment variables**: Before running the application, you need to add the following environment variables manually to your `.env` file or set them in your shell environment:
+   1. **Configure environment variables**: Before running the application, you need to add the following environment variables manually to your `.env` file or set them in your shell environment. The values must be the *Assistant IDs* you see in Azure AI Foundry (each id starts with `asst_`). To locate them: open [Azure AI Foundry](https://ai.azure.com), select your project, go to **Agents**, open each agent (Claim Reviewer, Risk Analyzer, Policy Checker), and copy the **Agent ID** shown in the details pane.
 
    ```bash
    CLAIM_REV_AGENT_ID=""
