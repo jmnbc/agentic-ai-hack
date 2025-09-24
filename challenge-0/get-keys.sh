@@ -37,7 +37,7 @@ if [[ -z "${USER_KEY}" ]]; then
   current_user=$(az account show --query user.name -o tsv 2>/dev/null || echo "")
   if [[ -n "$current_user" ]]; then
     # Try to find user key from Owner role assignments
-    owner_scope=$(az role assignment list --assignee "$current_user" --role "Owner" --query "[?contains(scope, '/resourceGroups/')].scope | [0]" -o tsv 2>/dev/null || echo "")
+    owner_scope=$(az role assignment list --assignee "$current_user" --role "Owner" --query "[?contains(scope, '/resourceGroups/rg-aihack-') && !contains(scope, 'shared')].scope | [0]" -o tsv 2>/dev/null || echo "")
     if [[ -n "$owner_scope" && "$owner_scope" != "null" ]]; then
       # Extract user key from RG name like "rg-aihack-user1" -> "user1"
       rg_name=$(echo "$owner_scope" | awk -F'/' '{print $NF}')
@@ -50,7 +50,7 @@ if [[ -z "${USER_KEY}" ]]; then
   
   # Fallback: try to find any rg-aihack-* resource group
   if [[ -z "$USER_KEY" ]]; then
-    fallback_rg=$(az group list --query "[?contains(name, 'rg-aihack-')].name | [0]" -o tsv 2>/dev/null || echo "")
+    fallback_rg=$(az group list --query "[?starts_with(name, 'rg-aihack-') && name != '${SHARED_RG}'].name | [0]" -o tsv 2>/dev/null || echo "")
     if [[ -n "$fallback_rg" && "$fallback_rg" != "null" ]]; then
       if [[ "$fallback_rg" =~ ^rg-aihack-(.+)$ ]]; then
         USER_KEY="${BASH_REMATCH[1]}"
@@ -95,13 +95,13 @@ fi
 # User RG: try Owner assignment scope, then heuristics with user key
 if ! az group show --name "$USER_RG" &>/dev/null; then
   if [[ -n "$current_user" ]]; then
-    owner_scope=$(az role assignment list --assignee "$current_user" --role "Owner" --query "[?contains(scope, '/resourceGroups/')].scope | [0]" -o tsv 2>/dev/null || echo "")
+    owner_scope=$(az role assignment list --assignee "$current_user" --role "Owner" --query "[?contains(scope, '/resourceGroups/rg-aihack-') && !contains(scope, 'shared')].scope | [0]" -o tsv 2>/dev/null || echo "")
     if [[ -n "$owner_scope" && "$owner_scope" != "null" ]]; then
       USER_RG=$(echo "$owner_scope" | awk -F'/' '{print $NF}')
     else
       cand=$(az group list --query "[?contains(name, '${USER_KEY}')].name | [0]" -o tsv 2>/dev/null || echo "")
       if [[ -z "$cand" || "$cand" == "null" ]]; then
-        cand=$(az group list --query "[?contains(name, 'rg-aihack')].name | [0]" -o tsv 2>/dev/null || echo "")
+        cand=$(az group list --query "[?starts_with(name, 'rg-aihack-') && name != '${SHARED_RG}'].name | [0]" -o tsv 2>/dev/null || echo "")
       fi
       if [[ -n "$cand" && "$cand" != "null" ]]; then
         USER_RG="$cand"
